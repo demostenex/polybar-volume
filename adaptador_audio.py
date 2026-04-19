@@ -165,6 +165,27 @@ class AdaptadorPactl:
     def set_default_source(self, source_name: str) -> None:
         self._run("set-default-source", source_name)
 
+    def get_source_volume(self) -> int:
+        raw = self._run("get-source-volume", "@DEFAULT_SOURCE@")
+        return self._parse_volume_pct(raw)
+
+    def set_source_volume(self, pct: int) -> None:
+        pct = max(0, min(150, pct))
+        self._run("set-source-volume", "@DEFAULT_SOURCE@", f"{pct}%")
+
+    def source_volume_up(self, step: int = 5) -> None:
+        self._run("set-source-volume", "@DEFAULT_SOURCE@", f"+{step}%")
+
+    def source_volume_down(self, step: int = 5) -> None:
+        self._run("set-source-volume", "@DEFAULT_SOURCE@", f"-{step}%")
+
+    def toggle_source_mute(self) -> None:
+        self._run("set-source-mute", "@DEFAULT_SOURCE@", "toggle")
+
+    def is_source_muted(self) -> bool:
+        raw = self._run("get-source-mute", "@DEFAULT_SOURCE@")
+        return raw.strip().lower().endswith("yes")
+
     def get_volume(self) -> int:
         raw = self._run("get-sink-volume", "@DEFAULT_SINK@")
         return self._parse_volume_pct(raw)

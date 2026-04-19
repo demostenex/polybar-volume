@@ -159,14 +159,17 @@ class JanelaAudio(Gtk.Window):
         title.get_style_context().add_class("section-title")
         outer.pack_start(title, False, False, 0)
 
-        # Volume
-        outer.pack_start(self._build_volume(), False, False, 0)
+        # Volume de saída
+        outer.pack_start(self._build_volume_saida(), False, False, 0)
 
-        # Saídas
+        # Saídas (dispositivos)
         self._sinks_box = self._build_lista("🔊  Saídas")
         outer.pack_start(self._sinks_box, False, False, 0)
 
-        # Entradas
+        # Volume de entrada
+        outer.pack_start(self._build_volume_entrada(), False, False, 0)
+
+        # Entradas (dispositivos)
         self._sources_box = self._build_lista("🎤  Entradas")
         outer.pack_start(self._sources_box, False, False, 0)
 
@@ -177,10 +180,11 @@ class JanelaAudio(Gtk.Window):
         outer.pack_start(close, False, False, 0)
 
     def _build_volume(self) -> Gtk.Widget:
+    def _build_volume_saida(self) -> Gtk.Widget:
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         section.get_style_context().add_class("section")
 
-        lbl = Gtk.Label(label="🎚  Volume")
+        lbl = Gtk.Label(label="🎚  Volume de Saída")
         lbl.set_xalign(0)
         lbl.get_style_context().add_class("section-title")
         section.pack_start(lbl, False, False, 0)
@@ -212,6 +216,42 @@ class JanelaAudio(Gtk.Window):
 
         return section
 
+    def _build_volume_entrada(self) -> Gtk.Widget:
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        section.get_style_context().add_class("section")
+
+        lbl = Gtk.Label(label="🎙  Volume de Entrada (microfone)")
+        lbl.set_xalign(0)
+        lbl.get_style_context().add_class("section-title")
+        section.pack_start(lbl, False, False, 0)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        section.pack_start(row, False, False, 0)
+
+        btn_down = Gtk.Button(label="−")
+        btn_down.get_style_context().add_class("vol-btn")
+        btn_down.connect("clicked", self._on_src_vol_down)
+        row.pack_start(btn_down, False, False, 0)
+
+        self._src_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 150, 1)
+        self._src_scale.set_draw_value(True)
+        self._src_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        self._src_scale.set_size_request(220, -1)
+        self._src_scale.connect("value-changed", self._on_src_scale_changed)
+        row.pack_start(self._src_scale, True, True, 0)
+
+        btn_up = Gtk.Button(label="+")
+        btn_up.get_style_context().add_class("vol-btn")
+        btn_up.connect("clicked", self._on_src_vol_up)
+        row.pack_start(btn_up, False, False, 0)
+
+        self._src_mute_btn = Gtk.Button(label="🔇  Mudo")
+        self._src_mute_btn.get_style_context().add_class("mute-off")
+        self._src_mute_btn.connect("clicked", self._on_toggle_src_mute)
+        section.pack_start(self._src_mute_btn, False, False, 0)
+
+        return section
+
     def _build_lista(self, titulo: str) -> Gtk.Widget:
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         section.get_style_context().add_class("section")
@@ -237,6 +277,7 @@ class JanelaAudio(Gtk.Window):
     # ------------------------------------------------------------------
 
     def _refresh(self) -> None:
+        # --- Volume de saída ---
         try:
             vol = self.adaptador.get_volume()
             self._scale.handler_block_by_func(self._on_scale_changed)
@@ -259,6 +300,30 @@ class JanelaAudio(Gtk.Window):
         except Exception:
             pass
 
+        # --- Volume de entrada ---
+        try:
+            src_vol = self.adaptador.get_source_volume()
+            self._src_scale.handler_block_by_func(self._on_src_scale_changed)
+            self._src_scale.set_value(src_vol)
+            self._src_scale.handler_unblock_by_func(self._on_src_scale_changed)
+        except Exception:
+            pass
+
+        try:
+            src_muted = self.adaptador.is_source_muted()
+            ctx = self._src_mute_btn.get_style_context()
+            if src_muted:
+                ctx.remove_class("mute-off")
+                ctx.add_class("mute-on")
+                self._src_mute_btn.set_label("🔇  Mudo (ativo)")
+            else:
+                ctx.remove_class("mute-on")
+                ctx.add_class("mute-off")
+                self._src_mute_btn.set_label("🔇  Mudo")
+        except Exception:
+            pass
+
+        # --- Listas de dispositivos ---
         try:
             default_sink = self.adaptador.get_default_sink()
             sinks = self.adaptador.listar_sinks()
@@ -348,6 +413,43 @@ class JanelaAudio(Gtk.Window):
     def _on_toggle_mute(self, _btn) -> None:
         try:
             self.adaptador.toggle_mute()
+            GLib.timeout_add(100, self._refresh)
+        except Exception:
+            pass
+
+    # --- Callbacks de entrada ---
+
+    def _on_src_scale_changed(self, scale: Gtk.Scale) -> None:
+        if self._vol_debounce_id is not None:
+            GLib.source_remove(self._vol_debounce_id)
+        val = int(scale.get_value())
+        self._vol_debounce_id = GLib.timeout_add(300, self._apply_source_volume, val)
+
+    def _apply_source_volume(self, val: int) -> bool:
+        try:
+            self.adaptador.set_source_volume(val)
+        except Exception:
+            pass
+        self._vol_debounce_id = None
+        return False
+
+    def _on_src_vol_up(self, _btn) -> None:
+        try:
+            self.adaptador.source_volume_up(5)
+            GLib.timeout_add(100, self._refresh)
+        except Exception:
+            pass
+
+    def _on_src_vol_down(self, _btn) -> None:
+        try:
+            self.adaptador.source_volume_down(5)
+            GLib.timeout_add(100, self._refresh)
+        except Exception:
+            pass
+
+    def _on_toggle_src_mute(self, _btn) -> None:
+        try:
+            self.adaptador.toggle_source_mute()
             GLib.timeout_add(100, self._refresh)
         except Exception:
             pass
