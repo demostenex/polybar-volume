@@ -91,11 +91,28 @@ def modo_set_sink(adaptador: AdaptadorPactl, sink_name: str) -> None:
     adaptador.set_default_sink(sink_name)
 
 
+def modo_list_sources(adaptador: AdaptadorPactl) -> None:
+    """Saída tab-separada para o yad: index \\t descrição \\t ativo."""
+    try:
+        default = adaptador.get_default_source()
+        sources = adaptador.listar_sources()
+        for s in sources:
+            ativo = "✔" if s["name"] == default else " "
+            print(f"{s['index']}\t{s['description']}\t{ativo}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERR {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def modo_set_source(adaptador: AdaptadorPactl, source_name: str) -> None:
+    adaptador.set_default_source(source_name)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
-MODOS = ["module", "list-sinks", "toggle-mute", "volume-up", "volume-down", "set-sink"]
+MODOS = ["module", "list-sinks", "list-sources", "toggle-mute", "volume-up", "volume-down", "set-sink", "set-source"]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -118,6 +135,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="",
         help="Nome do sink (para --mode set-sink)",
     )
+    parser.add_argument(
+        "--source",
+        type=str,
+        default="",
+        help="Nome da source (para --mode set-source)",
+    )
     return parser.parse_args(argv)
 
 
@@ -128,10 +151,12 @@ def main(argv: list[str] | None = None) -> None:
     mapa = {
         "module": lambda: modo_module(adaptador),
         "list-sinks": lambda: modo_list_sinks(adaptador),
+        "list-sources": lambda: modo_list_sources(adaptador),
         "toggle-mute": lambda: modo_toggle_mute(adaptador),
         "volume-up": lambda: modo_volume_up(adaptador, args.step),
         "volume-down": lambda: modo_volume_down(adaptador, args.step),
         "set-sink": lambda: modo_set_sink(adaptador, args.sink),
+        "set-source": lambda: modo_set_source(adaptador, args.source),
     }
 
     mapa[args.mode]()

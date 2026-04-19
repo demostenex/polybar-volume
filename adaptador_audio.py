@@ -18,6 +18,9 @@ class AdaptadorAudioProtocol(Protocol):
     def listar_sinks(self) -> list[dict]: ...
     def get_default_sink(self) -> str: ...
     def set_default_sink(self, sink_name: str) -> None: ...
+    def listar_sources(self) -> list[dict]: ...
+    def get_default_source(self) -> str: ...
+    def set_default_source(self, source_name: str) -> None: ...
     def get_volume(self) -> int: ...
     def set_volume(self, pct: int) -> None: ...
     def volume_up(self, step: int = 5) -> None: ...
@@ -110,6 +113,57 @@ class AdaptadorPactl:
 
     def set_default_sink(self, sink_name: str) -> None:
         self._run("set-default-sink", sink_name)
+
+    def listar_sources(self) -> list[dict]:
+        """Retorna fontes de entrada reais (exclui monitors de saída)."""
+        raw = self._run("list", "sources")
+        sources: list[dict] = []
+        current: dict | None = None
+
+        for line in raw.splitlines():
+            m = re.match(r"^Source #(\d+)", line)
+            if m:
+                if current:
+                    sources.append(current)
+                current = {
+                    "index": int(m.group(1)),
+                    "name": "",
+                    "description": "",
+                    "muted": False,
+                    "state": "",
+                    "tipo": "",
+                }
+                continue
+
+            if current is None:
+                continue
+
+            line_s = line.strip()
+
+            if line_s.startswith("Name:"):
+                current["name"] = line_s.split(":", 1)[1].strip()
+                current["tipo"] = self.detectar_tipo(current["name"])
+
+            elif line_s.startswith("Description:"):
+                current["description"] = line_s.split(":", 1)[1].strip()
+
+            elif line_s.startswith("State:"):
+                current["state"] = line_s.split(":", 1)[1].strip()
+
+            elif line_s.startswith("Mute:"):
+                current["muted"] = line_s.split(":", 1)[1].strip().lower() == "yes"
+
+        if current:
+            sources.append(current)
+
+        # Filtra monitors (saídas de loopback de sink), mantém apenas entradas reais
+        return [s for s in sources if ".monitor" not in s["name"]]
+
+    def get_default_source(self) -> str:
+        return self._run("get-default-source")
+
+    def set_default_source(self, source_name: str) -> None:
+        self._run("set-default-source", source_name)
 
     def get_volume(self) -> int:
         raw = self._run("get-sink-volume", "@DEFAULT_SINK@")

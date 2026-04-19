@@ -14,11 +14,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from volume_polybar import (  # noqa: E402
     _icone_e_cor,
     modo_list_sinks,
+    modo_list_sources,
     modo_module,
+    modo_set_sink,
+    modo_set_source,
     modo_toggle_mute,
     modo_volume_down,
     modo_volume_up,
-    modo_set_sink,
     ICONE_MUDO,
     ICONE_BT,
     ICONE_VOL_BAIXO,
@@ -168,7 +170,41 @@ class TestModoListSinks:
 
 
 # ---------------------------------------------------------------------------
-# modo_toggle_mute / volume_up / volume_down / set_sink
+# modo_list_sources
+# ---------------------------------------------------------------------------
+
+class TestModoListSources:
+    def _make_adaptador(self, default="src_analog"):
+        a = MagicMock()
+        a.get_default_source.return_value = default
+        a.listar_sources.return_value = [
+            {"index": 59, "name": "src_analog", "description": "Microfone interno",
+             "muted": False, "state": "SUSPENDED", "tipo": "analog"},
+            {"index": 100, "name": "bluez_input.55", "description": "C01 Microfone",
+             "muted": False, "state": "RUNNING", "tipo": "bluetooth"},
+        ]
+        return a
+
+    def test_saida_duas_sources(self, capsys):
+        modo_list_sources(self._make_adaptador())
+        out = capsys.readouterr().out
+        assert len(out.strip().splitlines()) == 2
+
+    def test_ativo_marcado(self, capsys):
+        modo_list_sources(self._make_adaptador(default="src_analog"))
+        out = capsys.readouterr().out
+        linhas = out.strip().splitlines()
+        assert "✔" in linhas[0]
+
+    def test_separador_tab(self, capsys):
+        modo_list_sources(self._make_adaptador())
+        out = capsys.readouterr().out
+        for linha in out.strip().splitlines():
+            assert "\t" in linha
+
+
+# ---------------------------------------------------------------------------
+# modo_toggle_mute / volume_up / volume_down / set_sink / set_source
 # ---------------------------------------------------------------------------
 
 class TestControles:
@@ -191,3 +227,9 @@ class TestControles:
         a = MagicMock()
         modo_set_sink(a, "bluez_output.12.1")
         a.set_default_sink.assert_called_once_with("bluez_output.12.1")
+
+    def test_set_source_chama_adaptador(self):
+        a = MagicMock()
+        modo_set_source(a, "bluez_input.55.1")
+        a.set_default_source.assert_called_once_with("bluez_input.55.1")
+

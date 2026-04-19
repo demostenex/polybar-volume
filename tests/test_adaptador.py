@@ -193,3 +193,67 @@ class TestSetVolume:
             adaptador.set_volume(-10)
         cmd = mock.call_args[0][0]
         assert "0%" in cmd
+
+
+# ---------------------------------------------------------------------------
+# listar_sources
+# ---------------------------------------------------------------------------
+
+PACTL_LIST_SOURCES = """\
+Source #58
+\tState: SUSPENDED
+\tName: alsa_output.pci-0000_00_1b.0.analog-stereo.monitor
+\tDescription: Monitor of Built-in Audio Analog Stereo
+\tMute: no
+Source #59
+\tState: SUSPENDED
+\tName: alsa_input.pci-0000_00_1b.0.analog-stereo
+\tDescription: Built-in Audio Analog Stereo (microfone)
+\tMute: no
+Source #100
+\tState: RUNNING
+\tName: bluez_input.55:FB:BA:A6:E7:D2
+\tDescription: C01 Microfone
+\tMute: no
+"""
+
+
+class TestListarSources:
+    def test_exclui_monitors(self, adaptador):
+        with patch("adaptador_audio.subprocess.run", return_value=mock_run(PACTL_LIST_SOURCES)):
+            sources = adaptador.listar_sources()
+        nomes = [s["name"] for s in sources]
+        assert not any(".monitor" in n for n in nomes)
+
+    def test_retorna_entradas_reais(self, adaptador):
+        with patch("adaptador_audio.subprocess.run", return_value=mock_run(PACTL_LIST_SOURCES)):
+            sources = adaptador.listar_sources()
+        assert len(sources) == 2
+
+    def test_source_analogico(self, adaptador):
+        with patch("adaptador_audio.subprocess.run", return_value=mock_run(PACTL_LIST_SOURCES)):
+            sources = adaptador.listar_sources()
+        s = sources[0]
+        assert s["index"] == 59
+        assert "microfone" in s["description"].lower()
+        assert s["tipo"] == "analog"
+
+    def test_source_bluetooth(self, adaptador):
+        with patch("adaptador_audio.subprocess.run", return_value=mock_run(PACTL_LIST_SOURCES)):
+            sources = adaptador.listar_sources()
+        s = sources[1]
+        assert s["tipo"] == "bluetooth"
+
+
+class TestDefaultSource:
+    def test_get_default_source(self, adaptador):
+        with patch("adaptador_audio.subprocess.run",
+                   return_value=mock_run("alsa_input.pci-0000_00_1b.0.analog-stereo\n")):
+            assert adaptador.get_default_source() == "alsa_input.pci-0000_00_1b.0.analog-stereo"
+
+    def test_set_default_source_chama_pactl(self, adaptador):
+        with patch("adaptador_audio.subprocess.run", return_value=mock_run("")) as mock:
+            adaptador.set_default_source("bluez_input.55:FB:BA:A6:E7:D2")
+        cmd = mock.call_args[0][0]
+        assert cmd == ["pactl", "set-default-source", "bluez_input.55:FB:BA:A6:E7:D2"]
+
