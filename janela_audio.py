@@ -179,7 +179,6 @@ class JanelaAudio(Gtk.Window):
         close.connect("clicked", lambda _: self.destroy())
         outer.pack_start(close, False, False, 0)
 
-    def _build_volume(self) -> Gtk.Widget:
     def _build_volume_saida(self) -> Gtk.Widget:
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         section.get_style_context().add_class("section")
